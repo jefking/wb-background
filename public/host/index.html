@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Window Broker</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Browser-brokered capabilities</p>
+        <h1>Window Broker</h1>
+        <p class="lede">The shell decides which task may read which key. Secret values travel directly from the privacy frame to the task.</p>
+      </div>
+      <div class="protocol-badge" title="Window Broker protocol version">WB / v1</div>
+    </header>
+
+    <section class="broker-board" aria-label="Browser permission controls">
+      <article class="broker-card pending-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">Browser decision</p>
+            <h2>Pending requests</h2>
+          </div>
+          <span id="pending-count" class="count">0</span>
+        </div>
+        <div id="pending-list" class="item-list" aria-live="polite"></div>
+      </article>
+
+      <article class="broker-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">Current task document</p>
+            <h2>Active grants</h2>
+          </div>
+          <span id="grant-count" class="count">0</span>
+        </div>
+        <div id="grant-list" class="item-list" aria-live="polite"></div>
+      </article>
+
+      <article class="broker-card">
+        <div class="card-heading">
+          <div>
+            <p class="eyebrow">Names only</p>
+            <h2>Privacy catalog</h2>
+          </div>
+          <span id="catalog-count" class="count">0</span>
+        </div>
+        <div id="catalog-list" class="key-cloud" aria-live="polite"></div>
+      </article>
+    </section>
+
+    <p id="shell-notice" class="shell-notice" aria-live="polite">Starting isolated frames…</p>
+
+    <main class="frame-grid">
+      <section class="frame-panel task-panel">
+        <div class="frame-heading">
+          <div>
+            <p class="eyebrow">Left iframe</p>
+            <h2>Task frame</h2>
+          </div>
+          <span id="task-status" class="status waiting">Not loaded</span>
+        </div>
+        <form id="task-url-form" class="url-form">
+          <label for="task-url">Task URL</label>
+          <div class="url-row">
+            <input id="task-url" name="task-url" type="url" spellcheck="false" autocomplete="off" required>
+            <button type="submit">Load</button>
+          </div>
+          <p id="task-url-error" class="field-error" aria-live="polite"></p>
+        </form>
+        <iframe
+          id="task-frame"
+          title="Background task frame"
+          sandbox="allow-scripts allow-same-origin"
+          referrerpolicy="strict-origin"
+          allow="camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'; clipboard-read 'none'; clipboard-write 'none'"
+        ></iframe>
+      </section>
+
+      <section class="frame-panel privacy-panel">
+        <div class="frame-heading">
+          <div>
+            <p class="eyebrow">Right iframe</p>
+            <h2>Privacy frame</h2>
+          </div>
+          <span id="privacy-status" class="status waiting">Not loaded</span>
+        </div>
+        <form id="privacy-url-form" class="url-form">
+          <label for="privacy-url">Privacy URL</label>
+          <div class="url-row">
+            <input id="privacy-url" name="privacy-url" type="url" spellcheck="false" autocomplete="off" required>
+            <button type="submit">Load</button>
+          </div>
+          <p id="privacy-url-error" class="field-error" aria-live="polite"></p>
+        </form>
+        <iframe
+          id="privacy-frame"
+          title="Secret privacy frame"
+          sandbox="allow-scripts"
+          referrerpolicy="strict-origin"
+          allow="camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'; clipboard-read 'none'; clipboard-write 'none'"
+        ></iframe>
+      </section>
+    </main>
+
+    <footer>
+      Revocation blocks future reads. A task can retain or transmit any plaintext it has already received.
+    </footer>
+
+    <script type="module" src="/host.js"></script>
+  </body>
+</html>

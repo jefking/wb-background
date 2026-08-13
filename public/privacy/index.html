@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Memory Vault</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Memory-only privacy provider</p>
+        <h1>Key Cabinet</h1>
+      </div>
+      <span id="connection-status" class="status waiting">Waiting for broker</span>
+    </header>
+
+    <div class="notice">
+      Values stay in this iframe’s memory. Reloading or swapping this frame erases them.
+    </div>
+
+    <section class="editor" aria-labelledby="editor-title">
+      <h2 id="editor-title">Add or update a secret</h2>
+      <label for="secret-key">Key</label>
+      <input id="secret-key" value="demo.secret" maxlength="128" autocomplete="off" spellcheck="false">
+      <label for="secret-value">Value</label>
+      <input id="secret-value" type="password" maxlength="16384" autocomplete="new-password" spellcheck="false">
+      <button id="save-secret" type="button">Save in memory</button>
+      <p id="editor-message" aria-live="polite"></p>
+    </section>
+
+    <section class="inventory" aria-labelledby="inventory-title">
+      <div class="inventory-heading">
+        <h2 id="inventory-title">Stored keys</h2>
+        <span id="key-count">0</span>
+      </div>
+      <div id="key-list" aria-live="polite"></div>
+    </section>
+
+    <script src="/privacy.js"></script>
+  </body>
+</html>
