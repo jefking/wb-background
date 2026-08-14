@@ -147,16 +147,23 @@ export class BrokerState {
 
   registerTask({ taskId, frequencyMs = null, actions = [] } = {}) {
     const id = normalizeIdentifier(taskId, LIMITS.taskIdLength);
-    if (!id || !validFrequency(frequencyMs)
+    if (!id || id !== taskId || !validFrequency(frequencyMs)
       || !Array.isArray(actions) || actions.length > LIMITS.taskActions) {
       return { ok: false, error: "invalid_task_registration" };
     }
     const normalizedActions = actions.map((actionId) => normalizeIdentifier(actionId, LIMITS.actionIdLength));
-    if (normalizedActions.some((actionId) => !actionId || !this.actions.has(actionId))
+    if (normalizedActions.some((actionId, index) => !actionId
+      || actionId !== actions[index]
+      || !this.actions.has(actionId))
       || new Set(normalizedActions).size !== normalizedActions.length) {
       return { ok: false, error: "invalid_task_actions" };
     }
-    if (!this.tasks.has(id) && this.tasks.size >= LIMITS.registeredTasks) {
+    // A task registration is an immutable declaration for this frame session.
+    // Reusing an id must not mutate the action set behind an existing grant.
+    if (this.tasks.has(id)) {
+      return { ok: false, error: "duplicate_task_registration" };
+    }
+    if (this.tasks.size >= LIMITS.registeredTasks) {
       return { ok: false, error: "too_many_registered_tasks" };
     }
     this.tasks.set(id, { frequencyMs, actions: Object.freeze(normalizedActions) });
@@ -222,6 +229,9 @@ export class BrokerState {
 
     const normalizedTaskId = normalizeIdentifier(taskId, LIMITS.taskIdLength);
     const normalizedActionId = normalizeIdentifier(actionId, LIMITS.actionIdLength);
+    if (normalizedTaskId !== taskId || normalizedActionId !== actionId) {
+      return { kind: "rejected", error: "invalid_request" };
+    }
     const task = normalizedTaskId ? this.tasks.get(normalizedTaskId) : null;
     const action = normalizedActionId ? this.actions.get(normalizedActionId) : null;
     if (!task) return { kind: "rejected", error: "unknown_task" };
@@ -229,6 +239,11 @@ export class BrokerState {
       return { kind: "rejected", error: "action_not_declared" };
     }
     if (!validInput(input)) return { kind: "rejected", error: "invalid_input" };
+    for (const pending of this.pending.values()) {
+      if (pending.taskId === normalizedTaskId && pending.actionId === normalizedActionId) {
+        return { kind: "rejected", error: "action_in_flight" };
+      }
+    }
 
     const existingGrant = this.grants.get(grantKey(normalizedTaskId, normalizedActionId));
     if (existingGrant && this.#grantIsCurrent(existingGrant)) {

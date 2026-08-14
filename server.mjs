@@ -104,9 +104,9 @@ export function securityHeaders(role) {
     "X-Content-Type-Options": "nosniff"
   };
 
-  // A sandboxed privacy frame has an opaque origin. CORS permits its ES module
-  // graph to load without weakening the iframe's same-origin isolation.
-  if (role === "privacy") headers["Access-Control-Allow-Origin"] = "*";
+  // Both component frames have opaque sandbox origins. CORS permits their ES
+  // module graphs to load without granting either frame same-origin powers.
+  if (role === "task" || role === "privacy") headers["Access-Control-Allow-Origin"] = "*";
   return Object.freeze(headers);
 }
 

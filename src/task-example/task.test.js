@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { registerExampleTask } from "./task.js";
 
-test("the example registers a five-second task that requests demo.secret", async () => {
+test("the example registers a five-second task that invokes weather.current", async () => {
   let definition;
   const output = [];
   const runtime = {
@@ -14,17 +14,18 @@ test("the example registers a five-second task that requests demo.secret", async
   };
 
   const registration = registerExampleTask(runtime, (message) => output.push(message));
-  assert.deepEqual(registration, { id: "heartbeat" });
-  assert.equal(definition.id, "heartbeat");
+  assert.deepEqual(registration, { id: "weather-heartbeat" });
+  assert.equal(definition.id, "weather-heartbeat");
   assert.equal(definition.frequencyMs, 5_000);
+  assert.deepEqual(definition.actions, ["weather.current"]);
 
-  const requestedKeys = [];
+  const requests = [];
   await definition.run({
-    async getSecret(key) {
-      requestedKeys.push(key);
-      return "mock-value";
+    async invoke(actionId, input) {
+      requests.push({ actionId, input });
+      return { temperatureC: 10, condition: "cloudy", humidity: 75 };
     }
   });
-  assert.deepEqual(requestedKeys, ["demo.secret"]);
-  assert.deepEqual(output, ["heartbeat called with a 10-character secret"]);
+  assert.deepEqual(requests, [{ actionId: "weather.current", input: {} }]);
+  assert.deepEqual(output, ["10°C · cloudy · 75% humidity"]);
 });

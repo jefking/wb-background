@@ -11,6 +11,7 @@ export const ACTION_LIMITS: Readonly<{
   jsonDepth: number;
   jsonNodes: number;
   jsonStringLength: number;
+  vaultValueLength: number;
   responseBytes: number;
   requestBodyBytes: number;
 }>;

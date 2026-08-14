@@ -11,6 +11,7 @@ export const ACTION_LIMITS = Object.freeze({
   jsonDepth: 8,
   jsonNodes: 512,
   jsonStringLength: 4_096,
+  vaultValueLength: 16_384,
   responseBytes: 65_536,
   requestBodyBytes: 16_384
 });
@@ -234,6 +235,10 @@ export class ActionRegistry {
       if (!suppliedSlots.delete(binding.slot) || typeof values[binding.slot] !== "string") {
         throw new ActionError("missing_entry", `The host did not resolve required entry “${binding.key}”.`);
       }
+      if (values[binding.slot].length === 0
+        || values[binding.slot].length > ACTION_LIMITS.vaultValueLength) {
+        throw new ActionError("invalid_vault_value", `Vault entry “${binding.key}” has an invalid size.`);
+      }
       preparedValues[binding.slot] = values[binding.slot];
     }
     if (suppliedSlots.size > 0) {
@@ -343,11 +348,12 @@ export async function fetchJson({
     throw new ActionError("request_too_large", "The action request body is invalid or too large.");
   }
 
+  const normalizedHeaders = normalizeHeaders(headers);
   let response;
   try {
     response = await fetchFn(target.href, {
       method: normalizedMethod,
-      headers: normalizeHeaders(headers),
+      headers: normalizedHeaders,
       body,
       mode: "cors",
       credentials: "omit",

@@ -19,13 +19,13 @@ export class VaultError extends Error {
 
 function normalizeKey(value) {
   if (typeof value !== "string") {
-    throw new VaultError("invalid_key", "Secret key must be a string.");
+    throw new VaultError("invalid_key", "Vault key must be a string.");
   }
   const key = value.trim();
   if (key.length === 0 || key.length > VAULT_LIMITS.keyLength) {
     throw new VaultError(
       "invalid_key",
-      `Secret key must contain 1–${VAULT_LIMITS.keyLength} characters.`
+      `Vault key must contain 1–${VAULT_LIMITS.keyLength} characters.`
     );
   }
   return key;
@@ -33,12 +33,12 @@ function normalizeKey(value) {
 
 function normalizeValue(value) {
   if (typeof value !== "string") {
-    throw new VaultError("invalid_value", "Secret value must be a string.");
+    throw new VaultError("invalid_value", "Vault value must be a string.");
   }
   if (value.length === 0 || value.length > VAULT_LIMITS.valueLength) {
     throw new VaultError(
       "invalid_value",
-      `Secret value must contain 1–${VAULT_LIMITS.valueLength.toLocaleString("en-US")} characters.`
+      `Vault value must contain 1–${VAULT_LIMITS.valueLength.toLocaleString("en-US")} characters.`
     );
   }
   return value;
@@ -60,7 +60,7 @@ function isMessagePort(value) {
 /** An in-memory vault whose contents disappear with the page that owns it. */
 export class MemoryVault {
   constructor() {
-    this.secrets = new Map();
+    this.entries = new Map();
     this.nextRevision = 1;
     this.listeners = new Set();
   }
@@ -69,7 +69,7 @@ export class MemoryVault {
     const key = normalizeKey(requestedKey);
     const value = normalizeValue(requestedValue);
     const kind = normalizeKind(requestedKind);
-    if (!this.secrets.has(key) && this.secrets.size >= VAULT_LIMITS.keys) {
+    if (!this.entries.has(key) && this.entries.size >= VAULT_LIMITS.keys) {
       throw new VaultError("vault_full", `The vault cannot contain more than ${VAULT_LIMITS.keys} keys.`);
     }
     if (!Number.isSafeInteger(this.nextRevision)) {
@@ -77,37 +77,37 @@ export class MemoryVault {
     }
 
     const revision = this.nextRevision++;
-    this.secrets.set(key, { value, revision, kind });
+    this.entries.set(key, { value, revision, kind });
     this.#notify({ type: "saved", key, revision, kind });
     return Object.freeze({ key, revision, kind });
   }
 
   get(requestedKey) {
     const key = normalizeKey(requestedKey);
-    return this.secrets.get(key)?.value;
+    return this.entries.get(key)?.value;
   }
 
   has(requestedKey) {
     const key = normalizeKey(requestedKey);
-    return this.secrets.has(key);
+    return this.entries.has(key);
   }
 
   delete(requestedKey) {
     const key = normalizeKey(requestedKey);
-    if (!this.secrets.delete(key)) return false;
+    if (!this.entries.delete(key)) return false;
     this.#notify({ type: "deleted", key });
     return true;
   }
 
   clear() {
-    if (this.secrets.size === 0) return false;
-    this.secrets.clear();
+    if (this.entries.size === 0) return false;
+    this.entries.clear();
     this.#notify({ type: "cleared" });
     return true;
   }
 
   catalog() {
-    return [...this.secrets.entries()]
+    return [...this.entries.entries()]
       .map(([key, entry]) => Object.freeze({ key, revision: entry.revision, kind: entry.kind }))
       .sort((left, right) => left.key.localeCompare(right.key));
   }
@@ -123,7 +123,7 @@ export class MemoryVault {
       };
     }
 
-    const entry = this.secrets.get(key);
+    const entry = this.entries.get(key);
     if (!entry) {
       return {
         ok: false,
@@ -187,7 +187,7 @@ export class MemoryVault {
   }
 }
 
-/** Bridges a MemoryVault to the host without exposing values to the host port. */
+/** Resolves revision-bound entries to the trusted Host over one-shot reply ports. */
 export class VaultProvider {
   constructor({
     vault,

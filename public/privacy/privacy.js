@@ -47,7 +47,7 @@ function renderKeys() {
   if (entries.length === 0) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "No secrets are stored.";
+    empty.textContent = "No variables or secrets are stored.";
     keyList.append(empty);
     return;
   }

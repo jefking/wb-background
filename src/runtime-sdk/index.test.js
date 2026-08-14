@@ -15,7 +15,7 @@ function fakePort(messages) {
   };
 }
 
-test("scheduled tasks register their frequency and run without overlapping", async () => {
+test("scheduled tasks publish declared actions and run without overlapping", async () => {
   const messages = [];
   const intervals = [];
   const cleared = [];
@@ -38,8 +38,9 @@ test("scheduled tasks register their frequency and run without overlapping", asy
   });
 
   const controller = runtime.registerTask({
-    id: " heartbeat ",
+    id: " weather ",
     frequencyMs: 5_000,
+    actions: ["weather.current"],
     async run() {
       runCount += 1;
       if (runCount === 1) await firstRun;
@@ -49,8 +50,14 @@ test("scheduled tasks register their frequency and run without overlapping", asy
   await waitForImmediate();
 
   assert.deepEqual(messages.slice(0, 2), [
-    { type: "task.ready", protocol: 1 },
-    { type: "task.register", protocol: 1, taskId: "heartbeat", frequencyMs: 5_000 }
+    { type: "task.ready", protocol: 2 },
+    {
+      type: "task.register",
+      protocol: 2,
+      taskId: "weather",
+      frequencyMs: 5_000,
+      actions: ["weather.current"]
+    }
   ]);
   assert.equal(intervals[0].delay, 5_000);
   assert.equal(runCount, 1);
@@ -69,51 +76,63 @@ test("scheduled tasks register their frequency and run without overlapping", asy
   assert.deepEqual(cleared, [intervals[0]]);
   assert.deepEqual(messages.at(-1), {
     type: "task.unregister",
-    protocol: 1,
-    taskId: "heartbeat"
+    protocol: 2,
+    taskId: "weather"
   });
   runtime.destroy();
 });
 
-test("getSecret uses a one-shot reply port for values and broker errors", async () => {
+test("invoke sends bounded declarative input and resolves an action result", async () => {
   const control = new MessageChannel();
   const runtime = new TaskRuntime({
     trustedHostOrigin: "https://host.example",
     messageChannelFactory: () => new MessageChannel()
   });
+  runtime.registerTask({
+    id: "weather",
+    actions: ["weather.current"],
+    run() {}
+  });
 
   control.port2.on("message", (message) => {
-    if (message.type !== "secret.request") return;
-    const result = message.key === "demo.secret"
-      ? { ok: true, value: "swordfish" }
-      : { ok: false, error: { code: "denied", message: "No access." } };
+    if (message.type !== "action.request") return;
+    assert.equal(message.protocol, 2);
+    assert.equal(message.taskId, "weather");
+    assert.equal(message.actionId, "weather.current");
+    assert.deepEqual(message.input, { units: "metric" });
     message.replyPort.postMessage({
-      type: "secret.result",
-      protocol: 1,
-      ...result
+      type: "action.result",
+      protocol: 2,
+      ok: true,
+      data: { temperatureC: 12.5, condition: "rain" }
     });
     message.replyPort.close();
   });
   runtime.connect(control.port1);
 
-  assert.equal(await runtime.getSecret(" demo.secret "), "swordfish");
-
-  await assert.rejects(runtime.getSecret("denied.secret"), (error) => {
-    assert.ok(error instanceof RuntimeError);
-    assert.equal(error.code, "denied");
-    assert.equal(error.message, "No access.");
-    return true;
-  });
+  assert.deepEqual(
+    await runtime.invokeAction("weather", "weather.current", { units: "metric" }),
+    { temperatureC: 12.5, condition: "rain" }
+  );
+  await assert.rejects(
+    runtime.invokeAction("weather", "undeclared.action", {}),
+    (error) => error instanceof RuntimeError && error.code === "undeclared_action"
+  );
+  assert.throws(
+    () => runtime.invokeAction("weather", "weather.current", { value: undefined }),
+    (error) => error instanceof RuntimeError && error.code === "invalid_input"
+  );
 
   runtime.destroy();
   control.port2.close();
 });
 
-test("manual tasks expose runNow and validate schedule metadata", async () => {
+test("manual tasks expose runNow and validate action declarations", async () => {
   const runtime = new TaskRuntime({ trustedHostOrigin: "https://host.example" });
   let received;
   const task = runtime.registerTask({
     id: "manual",
+    actions: [],
     async run(context) {
       received = context;
     }
@@ -121,10 +140,14 @@ test("manual tasks expose runNow and validate schedule metadata", async () => {
 
   assert.equal(task.frequencyMs, null);
   await task.runNow();
-  assert.equal(typeof received.getSecret, "function");
+  assert.equal(typeof received.invoke, "function");
   assert.throws(
     () => runtime.registerTask({ id: "bad", frequencyMs: 0, run() {} }),
     /positive integer/
+  );
+  assert.throws(
+    () => runtime.registerTask({ id: "duplicate", actions: ["a", "a"], run() {} }),
+    /unique/
   );
   runtime.destroy();
 });

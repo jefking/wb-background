@@ -4,6 +4,10 @@ import { BrokerState, PROTOCOL_VERSION, validateFrameUrl } from "/broker-core.js
 
 const DEFAULT_TASK_URL = "http://127.0.0.1:8001/";
 const DEFAULT_PRIVACY_URL = "http://127.0.0.1:8002/";
+const ALLOWED_FRAME_ORIGINS = Object.freeze({
+  task: new URL(DEFAULT_TASK_URL).origin,
+  privacy: new URL(DEFAULT_PRIVACY_URL).origin
+});
 const HANDSHAKE_TIMEOUT_MS = 3_000;
 const ACTION_TIMEOUT_MS = 8_000;
 const MAX_ACTIVE_ACTIONS = 16;
@@ -167,8 +171,7 @@ function connectFrame(role) {
   try {
     // Privacy intentionally has an opaque sandbox origin. Its WindowProxy,
     // trusted-parent check, and transferred port form its connection boundary.
-    const targetOrigin = role === "privacy" ? "*" : session.origin;
-    session.frame.contentWindow.postMessage(connectMessage, targetOrigin, [channel.port2]);
+    session.frame.contentWindow.postMessage(connectMessage, "*", [channel.port2]);
   } catch (error) {
     clearTimeout(session.handshakeTimer);
     closePort(channel.port1);
@@ -229,6 +232,16 @@ function handleTaskMessage(session, event) {
       error: { code: error.code ?? "invalid_input", message: publicErrorMessage(error.code) }
     });
     return;
+  }
+
+  for (const active of activeRequests.values()) {
+    if (active.taskId === message.taskId && active.actionId === message.actionId) {
+      sendActionResult(replyPort, {
+        ok: false,
+        error: { code: "action_in_flight", message: publicErrorMessage("action_in_flight") }
+      });
+      return;
+    }
   }
 
   const decision = broker.request({
@@ -549,6 +562,7 @@ function publicErrorMessage(code) {
     too_many_pending_requests: "The task exceeded the pending-request limit.",
     unknown_task: "The action came from an unknown task.",
     action_not_declared: "The task did not declare this Host action.",
+    action_in_flight: "This task action already has a pending or active request.",
     unknown_action: "The Host does not implement this action.",
     invalid_input: "The action input failed validation.",
     input_too_large: "The action input exceeded its size limit.",
@@ -587,6 +601,10 @@ function loadFrame(role, rawUrl) {
 
   if (!validated.ok) {
     session.error.textContent = validated.error;
+    return false;
+  }
+  if (validated.origin !== ALLOWED_FRAME_ORIGINS[role]) {
+    session.error.textContent = `This POC only permits ${ALLOWED_FRAME_ORIGINS[role]}.`;
     return false;
   }
 
