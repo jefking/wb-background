@@ -7,6 +7,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 const sourceAssets = Object.freeze({
+  host: Object.freeze({
+    "/action-sdk/index.js": resolve(projectRoot, "src/action-sdk/index.js"),
+    "/action-example/weather.js": resolve(projectRoot, "src/action-example/weather.js")
+  }),
   task: Object.freeze({
     "/runtime-sdk/index.js": resolve(projectRoot, "src/runtime-sdk/index.js"),
     "/task-example/index.js": resolve(projectRoot, "src/task-example/index.js"),
@@ -21,6 +25,13 @@ export const ORIGINS = Object.freeze({
   host: Object.freeze({ role: "host", port: 8000, root: resolve(projectRoot, "public/host") }),
   task: Object.freeze({ role: "task", port: 8001, root: resolve(projectRoot, "public/task") }),
   privacy: Object.freeze({ role: "privacy", port: 8002, root: resolve(projectRoot, "public/privacy") })
+});
+
+export const WEATHER_SERVICE = Object.freeze({
+  role: "weather",
+  port: 8003,
+  origin: "http://127.0.0.1:8003",
+  allowedOrigin: "http://127.0.0.1:8000"
 });
 
 const contentTypes = Object.freeze({
@@ -49,8 +60,8 @@ const contentSecurityPolicies = Object.freeze({
     "script-src 'self'",
     "style-src 'self'",
     "img-src 'none'",
-    "connect-src 'none'",
-    "frame-src http: https:",
+    `connect-src ${WEATHER_SERVICE.origin}`,
+    "frame-src http://127.0.0.1:8001 http://127.0.0.1:8002",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
@@ -176,6 +187,78 @@ export function createOriginServer(role, options = {}) {
   });
 }
 
+function weatherForCity(city, now = () => new Date()) {
+  let hash = 2_166_136_261;
+  for (const character of city.toLocaleLowerCase("en-US")) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  const conditions = ["clear", "cloudy", "fog", "rain", "snow", "wind"];
+  return Object.freeze({
+    city,
+    temperatureC: Math.round((((hash % 451) - 100) / 10) * 10) / 10,
+    humidity: 30 + (hash % 66),
+    condition: conditions[hash % conditions.length],
+    observedAt: now().toISOString()
+  });
+}
+
+/** A deterministic local API used to demonstrate a constrained Host action. */
+export function createWeatherService(options = {}) {
+  const allowedOrigin = options.allowedOrigin ?? WEATHER_SERVICE.allowedOrigin;
+  const now = options.now ?? (() => new Date());
+
+  return createServer((request, response) => {
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": allowedOrigin,
+      "Cache-Control": "no-store",
+      "Content-Security-Policy": "default-src 'none'",
+      "Referrer-Policy": "no-referrer",
+      "Vary": "Origin",
+      "X-Content-Type-Options": "nosniff"
+    };
+    if (request.headers.origin !== allowedOrigin) {
+      sendText(response, 403, "Forbidden origin\n", {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff"
+      });
+      return;
+    }
+    if (request.method !== "GET") {
+      response.setHeader("Allow", "GET");
+      sendText(response, 405, "Method not allowed\n", corsHeaders);
+      return;
+    }
+
+    let url;
+    try {
+      url = new URL(request.url ?? "/", WEATHER_SERVICE.origin);
+    } catch {
+      sendText(response, 400, "Bad request\n", corsHeaders);
+      return;
+    }
+    const queryKeys = [...url.searchParams.keys()];
+    const city = url.searchParams.get("city")?.normalize("NFC").trim() ?? "";
+    if (url.pathname !== "/weather"
+      || queryKeys.length !== 1
+      || queryKeys[0] !== "city"
+      || city.length === 0
+      || city.length > 80
+      || /[\u0000-\u001f\u007f]/.test(city)) {
+      sendText(response, 400, "Invalid weather request\n", corsHeaders);
+      return;
+    }
+
+    const body = JSON.stringify(weatherForCity(city, now));
+    response.writeHead(200, {
+      ...corsHeaders,
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": Buffer.byteLength(body)
+    });
+    response.end(body);
+  });
+}
+
 export async function startServers(options = {}) {
   const host = options.host ?? "127.0.0.1";
   const ports = options.ports ?? {};
@@ -194,6 +277,16 @@ export async function startServers(options = {}) {
       });
       running.push({ role, server });
     }
+    const weather = createWeatherService();
+    const weatherPort = ports.weather ?? WEATHER_SERVICE.port;
+    await new Promise((resolveListen, rejectListen) => {
+      weather.once("error", rejectListen);
+      weather.listen(weatherPort, host, () => {
+        weather.off("error", rejectListen);
+        resolveListen();
+      });
+    });
+    running.push({ role: WEATHER_SERVICE.role, server: weather });
   } catch (error) {
     await Promise.all(running.map(({ server }) => new Promise((resolveClose) => server.close(resolveClose))));
     throw error;

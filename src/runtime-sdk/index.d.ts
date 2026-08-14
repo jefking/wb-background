@@ -1,4 +1,6 @@
-export const PROTOCOL_VERSION: 1;
+export const PROTOCOL_VERSION: 2;
+
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export class RuntimeError extends Error {
   readonly code: string;
@@ -6,13 +8,14 @@ export class RuntimeError extends Error {
 }
 
 export interface TaskContext {
-  getSecret(key: string): Promise<string>;
+  invoke<TResult extends JsonValue = JsonValue>(actionId: string, input?: JsonValue): Promise<TResult>;
 }
 
 export interface TaskDefinition {
   id: string;
   run(context: TaskContext): void | Promise<void>;
   frequencyMs?: number;
+  actions?: string[];
 }
 
 export interface TaskController {
@@ -41,7 +44,11 @@ export class TaskRuntime {
   registerTask(definition: TaskDefinition): TaskController;
   unregisterTask(id: string): boolean;
   runTask(id: string): Promise<void>;
-  getSecret(key: string): Promise<string>;
+  invokeAction<TResult extends JsonValue = JsonValue>(
+    taskId: string,
+    actionId: string,
+    input?: JsonValue
+  ): Promise<TResult>;
   destroy(): void;
 }
 

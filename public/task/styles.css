@@ -131,6 +131,7 @@ h2 {
   border-top: 1px solid #dfd1b3;
   padding: 8px 0;
   font: 0.7rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  animation: run-arrived 500ms ease-out;
 }
 
 #activity-log li:first-child {
@@ -156,4 +157,19 @@ h2 {
 
 .detail {
   overflow-wrap: anywhere;
+}
+
+@keyframes run-arrived {
+  from {
+    background: rgba(67, 132, 126, 0.22);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #activity-log li {
+    animation: none;
+  }
 }

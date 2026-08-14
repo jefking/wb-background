@@ -1,10 +1,13 @@
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const VAULT_LIMITS = Object.freeze({
   keys: 128,
   keyLength: 128,
   valueLength: 16_384
 });
+
+const ENTRY_KINDS = new Set(["variable", "secret"]);
+const MAX_RESOLVED_ENTRIES = 8;
 
 export class VaultError extends Error {
   constructor(code, message) {
@@ -41,6 +44,13 @@ function normalizeValue(value) {
   return value;
 }
 
+function normalizeKind(value) {
+  if (!ENTRY_KINDS.has(value)) {
+    throw new VaultError("invalid_kind", "Entry kind must be either variable or secret.");
+  }
+  return value;
+}
+
 function isMessagePort(value) {
   return value
     && typeof value.postMessage === "function"
@@ -55,9 +65,10 @@ export class MemoryVault {
     this.listeners = new Set();
   }
 
-  save(requestedKey, requestedValue) {
+  save(requestedKey, requestedValue, { kind: requestedKind = "secret" } = {}) {
     const key = normalizeKey(requestedKey);
     const value = normalizeValue(requestedValue);
+    const kind = normalizeKind(requestedKind);
     if (!this.secrets.has(key) && this.secrets.size >= VAULT_LIMITS.keys) {
       throw new VaultError("vault_full", `The vault cannot contain more than ${VAULT_LIMITS.keys} keys.`);
     }
@@ -66,9 +77,9 @@ export class MemoryVault {
     }
 
     const revision = this.nextRevision++;
-    this.secrets.set(key, { value, revision });
-    this.#notify({ type: "saved", key, revision });
-    return Object.freeze({ key, revision });
+    this.secrets.set(key, { value, revision, kind });
+    this.#notify({ type: "saved", key, revision, kind });
+    return Object.freeze({ key, revision, kind });
   }
 
   get(requestedKey) {
@@ -97,11 +108,11 @@ export class MemoryVault {
 
   catalog() {
     return [...this.secrets.entries()]
-      .map(([key, entry]) => Object.freeze({ key, revision: entry.revision }))
+      .map(([key, entry]) => Object.freeze({ key, revision: entry.revision, kind: entry.kind }))
       .sort((left, right) => left.key.localeCompare(right.key));
   }
 
-  resolve(requestedKey, revision) {
+  resolve(requestedKey, revision, acceptedKinds = ["variable", "secret"]) {
     let key;
     try {
       key = normalizeKey(requestedKey);
@@ -122,10 +133,46 @@ export class MemoryVault {
     if (entry.revision !== revision) {
       return {
         ok: false,
-        error: { code: "stale_revision", message: "The secret changed after access was granted." }
+        error: { code: "stale_revision", message: "The vault entry changed after access was granted." }
       };
     }
-    return { ok: true, value: entry.value };
+    if (!Array.isArray(acceptedKinds)
+      || acceptedKinds.length === 0
+      || acceptedKinds.some((kind) => !ENTRY_KINDS.has(kind))
+      || !acceptedKinds.includes(entry.kind)) {
+      return {
+        ok: false,
+        error: { code: "kind_mismatch", message: "The vault entry kind is not allowed for this action." }
+      };
+    }
+    return { ok: true, value: entry.value, kind: entry.kind };
+  }
+
+  resolveEntries(bindings) {
+    if (!Array.isArray(bindings) || bindings.length === 0 || bindings.length > MAX_RESOLVED_ENTRIES) {
+      return {
+        ok: false,
+        error: { code: "invalid_bindings", message: "The action requested an invalid entry set." }
+      };
+    }
+    const slots = new Set();
+    const values = [];
+    for (const binding of bindings) {
+      if (typeof binding?.slot !== "string"
+        || binding.slot.length === 0
+        || binding.slot.length > 64
+        || slots.has(binding.slot)) {
+        return {
+          ok: false,
+          error: { code: "invalid_bindings", message: "The action requested invalid entry slots." }
+        };
+      }
+      slots.add(binding.slot);
+      const result = this.resolve(binding.key, binding.revision, binding.kinds);
+      if (!result.ok) return result;
+      values.push(Object.freeze({ slot: binding.slot, value: result.value }));
+    }
+    return { ok: true, values };
   }
 
   subscribe(listener) {
@@ -211,11 +258,11 @@ export class VaultProvider {
 
   handleBrokerMessage(event) {
     const message = event.data;
-    if (message?.type !== "secret.resolve" || message?.protocol !== PROTOCOL_VERSION) return false;
+    if (message?.type !== "vault.resolve" || message?.protocol !== PROTOCOL_VERSION) return false;
 
     const replyPort = event.ports?.[0] ?? message.replyPort;
     if (!isMessagePort(replyPort)) return false;
-    this.#sendResult(replyPort, this.vault.resolve(message.key, message.revision));
+    this.#sendResult(replyPort, this.vault.resolveEntries(message.entries));
     return true;
   }
 
@@ -244,7 +291,7 @@ export class VaultProvider {
 
   #sendResult(port, result) {
     try {
-      port.postMessage({ type: "secret.result", protocol: PROTOCOL_VERSION, ...result });
+      port.postMessage({ type: "vault.result", protocol: PROTOCOL_VERSION, ...result });
     } finally {
       this.#closePort(port);
     }

@@ -23,9 +23,11 @@
     <section class="activity">
       <div class="activity-heading">
         <h2>Output</h2>
-        <span id="run-state">Browser console</span>
+        <span id="run-state">Waiting for approval</span>
       </div>
-      <p>Approve the request in the host. Each completed run prints a message without printing the secret value.</p>
+      <p>Approve the request in the host. Completed runs appear here every five seconds without printing the secret value.</p>
+      <p id="activity-empty" class="empty">No completed runs yet.</p>
+      <ol id="activity-log" aria-label="Heartbeat run history" aria-live="polite"></ol>
     </section>
 
     <script type="module" src="/task-example/index.js"></script>

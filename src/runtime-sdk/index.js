@@ -1,7 +1,9 @@
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 const MAX_TASK_ID_LENGTH = 96;
-const MAX_SECRET_KEY_LENGTH = 128;
+const MAX_ACTION_ID_LENGTH = 96;
+const MAX_TASK_ACTIONS = 16;
+const MAX_ACTION_INPUT_BYTES = 8_192;
 
 export class RuntimeError extends Error {
   constructor(code, message) {
@@ -43,22 +45,56 @@ function normalizeFrequency(value) {
   return value;
 }
 
-function normalizeSecretKey(value) {
-  if (typeof value !== "string") {
-    throw new RuntimeError("invalid_key", "Secret key must be a string.");
+function normalizeActionId(value) {
+  if (typeof value !== "string") throw new RuntimeError("invalid_action", "Action id must be a string.");
+  const actionId = value.trim();
+  if (actionId.length === 0 || actionId.length > MAX_ACTION_ID_LENGTH) {
+    throw new RuntimeError("invalid_action", `Action id must contain 1–${MAX_ACTION_ID_LENGTH} characters.`);
   }
-  const key = value.trim();
-  if (key.length === 0 || key.length > MAX_SECRET_KEY_LENGTH) {
-    throw new RuntimeError(
-      "invalid_key",
-      `Secret key must contain 1–${MAX_SECRET_KEY_LENGTH} characters.`
-    );
+  return actionId;
+}
+
+function normalizeTaskActions(value) {
+  if (value === undefined) return Object.freeze([]);
+  if (!Array.isArray(value) || value.length > MAX_TASK_ACTIONS) {
+    throw new RangeError(`Task actions must be an array containing at most ${MAX_TASK_ACTIONS} action ids.`);
   }
-  return key;
+  const actions = value.map(normalizeActionId);
+  if (new Set(actions).size !== actions.length) {
+    throw new RuntimeError("duplicate_action", "Task action declarations must be unique.");
+  }
+  return Object.freeze(actions);
+}
+
+function normalizeActionInput(value) {
+  let serialized;
+  try {
+    serialized = JSON.stringify(value, (key, candidate) => {
+      if (["__proto__", "constructor", "prototype"].includes(key)) {
+        throw new TypeError("Action input contains an unsafe property name.");
+      }
+      if (typeof candidate === "number" && !Number.isFinite(candidate)) {
+        throw new TypeError("Action input can only contain finite numbers.");
+      }
+      if (["bigint", "function", "symbol", "undefined"].includes(typeof candidate)) {
+        throw new TypeError("Action input must contain only JSON values.");
+      }
+      return candidate;
+    });
+  } catch (error) {
+    throw new RuntimeError("invalid_input", error.message);
+  }
+  if (serialized === undefined) {
+    throw new RuntimeError("invalid_input", "Action input must be a JSON value.");
+  }
+  if (new TextEncoder().encode(serialized).byteLength > MAX_ACTION_INPUT_BYTES) {
+    throw new RuntimeError("input_too_large", "Action input exceeds 8,192 bytes.");
+  }
+  return JSON.parse(serialized);
 }
 
 /**
- * Runs registered task functions and supplies their brokered getSecret hook.
+ * Runs registered task functions and supplies their brokered action hook.
  * Scheduled tasks begin when the host connects and run once immediately.
  */
 export class TaskRuntime {
@@ -81,7 +117,7 @@ export class TaskRuntime {
     this.onTaskError = onTaskError;
     this.onConnectionChange = onConnectionChange;
     this.tasks = new Map();
-    this.pendingSecrets = new Map();
+    this.pendingActions = new Map();
     this.brokerPort = null;
     this.windowTarget = null;
     this.requestSequence = 0;
@@ -126,7 +162,7 @@ export class TaskRuntime {
     if (!isMessagePort(port)) throw new TypeError("A MessagePort-compatible broker port is required.");
 
     if (this.brokerPort) {
-      this.#rejectPendingSecrets("connection_replaced", "The broker connection was replaced.");
+      this.#rejectPendingActions("connection_replaced", "The broker connection was replaced.");
       this.#stopAllSchedules();
       this.#closePort(this.brokerPort);
     }
@@ -148,9 +184,10 @@ export class TaskRuntime {
    * Register a task. Include frequencyMs to run it immediately on connection and
    * repeatedly thereafter; omit it for a task invoked only through runNow().
    */
-  registerTask({ id, run, frequencyMs } = {}) {
+  registerTask({ id, run, frequencyMs, actions } = {}) {
     const normalizedId = normalizeTaskId(id);
     const normalizedFrequency = normalizeFrequency(frequencyMs);
+    const normalizedActions = normalizeTaskActions(actions);
     if (typeof run !== "function") throw new TypeError("Task run must be a function.");
     if (this.tasks.has(normalizedId)) {
       throw new RuntimeError("duplicate_task", `Task “${normalizedId}” is already registered.`);
@@ -160,6 +197,7 @@ export class TaskRuntime {
       id: normalizedId,
       run,
       frequencyMs: normalizedFrequency,
+      actions: normalizedActions,
       timer: null,
       activeRun: null
     };
@@ -201,7 +239,7 @@ export class TaskRuntime {
     if (task.activeRun) return task.activeRun;
 
     const context = Object.freeze({
-      getSecret: (key) => this.getSecret(key)
+      invoke: (actionId, input = {}) => this.invokeAction(task.id, actionId, input)
     });
     task.activeRun = Promise.resolve()
       .then(() => task.run(context))
@@ -211,8 +249,20 @@ export class TaskRuntime {
     return task.activeRun;
   }
 
-  getSecret(requestedKey) {
-    const key = normalizeSecretKey(requestedKey);
+  invokeAction(requestedTaskId, requestedActionId, input = {}) {
+    const taskId = normalizeTaskId(requestedTaskId);
+    const actionId = normalizeActionId(requestedActionId);
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      return Promise.reject(new RuntimeError("unknown_task", `Task “${taskId}” is not registered.`));
+    }
+    if (!task.actions.includes(actionId)) {
+      return Promise.reject(new RuntimeError(
+        "undeclared_action",
+        `Task “${taskId}” did not declare action “${actionId}”.`
+      ));
+    }
+    const normalizedInput = normalizeActionInput(input);
     if (!this.brokerPort) {
       return Promise.reject(new RuntimeError("broker_unavailable", "The broker is not connected."));
     }
@@ -222,41 +272,43 @@ export class TaskRuntime {
       throw new RuntimeError("unsupported", "messageChannelFactory must return two MessagePorts.");
     }
 
-    const requestId = `task-${Date.now().toString(36)}-${(++this.requestSequence).toString(36)}`;
+    const requestId = `action-${Date.now().toString(36)}-${(++this.requestSequence).toString(36)}`;
     return new Promise((resolve, reject) => {
       const finish = (callback, value) => {
-        this.pendingSecrets.delete(requestId);
+        this.pendingActions.delete(requestId);
         this.#closePort(channel.port1);
         callback(value);
       };
 
       channel.port1.onmessage = (event) => {
         const result = event.data;
-        if (result?.type !== "secret.result" || result?.protocol !== PROTOCOL_VERSION) {
-          finish(reject, new RuntimeError("malformed_response", "Malformed secret response."));
+        if (result?.type !== "action.result" || result?.protocol !== PROTOCOL_VERSION) {
+          finish(reject, new RuntimeError("malformed_response", "Malformed action response."));
           return;
         }
         if (!result.ok) {
           finish(reject, new RuntimeError(
             result.error?.code ?? "unknown_error",
-            result.error?.message ?? "Secret request failed."
+            result.error?.message ?? "Action request failed."
           ));
           return;
         }
-        finish(resolve, result.value);
+        finish(resolve, result.data);
       };
       channel.port1.onmessageerror = () => {
-        finish(reject, new RuntimeError("malformed_response", "Secret response could not be decoded."));
+        finish(reject, new RuntimeError("malformed_response", "Action response could not be decoded."));
       };
       channel.port1.start?.();
-      this.pendingSecrets.set(requestId, { port: channel.port1, reject });
+      this.pendingActions.set(requestId, { port: channel.port1, reject });
 
       try {
         this.brokerPort.postMessage({
-          type: "secret.request",
+          type: "action.request",
           protocol: PROTOCOL_VERSION,
           requestId,
-          key,
+          taskId,
+          actionId,
+          input: normalizedInput,
           replyPort: channel.port2
         }, [channel.port2]);
       } catch {
@@ -268,7 +320,7 @@ export class TaskRuntime {
   destroy() {
     this.stopListening();
     this.#stopAllSchedules();
-    this.#rejectPendingSecrets("runtime_stopped", "The task runtime stopped.");
+    this.#rejectPendingActions("runtime_stopped", "The task runtime stopped.");
     this.#closePort(this.brokerPort);
     this.brokerPort = null;
     this.onConnectionChange({ connected: false, reason: "stopped" });
@@ -279,7 +331,8 @@ export class TaskRuntime {
       type: "task.register",
       protocol: PROTOCOL_VERSION,
       taskId: task.id,
-      frequencyMs: task.frequencyMs
+      frequencyMs: task.frequencyMs,
+      actions: task.actions
     });
   }
 
@@ -313,12 +366,12 @@ export class TaskRuntime {
     for (const task of this.tasks.values()) this.#stopSchedule(task);
   }
 
-  #rejectPendingSecrets(code, message) {
-    for (const pending of this.pendingSecrets.values()) {
+  #rejectPendingActions(code, message) {
+    for (const pending of this.pendingActions.values()) {
       this.#closePort(pending.port);
       pending.reject(new RuntimeError(code, message));
     }
-    this.pendingSecrets.clear();
+    this.pendingActions.clear();
   }
 
   #closePort(port) {
