@@ -1,177 +1,81 @@
-(function privacyFrame() {
-  "use strict";
+import { MemoryVault, VaultProvider } from "/vault-sdk/index.js";
 
-  const PROTOCOL_VERSION = 1;
-  const TRUSTED_HOST_ORIGIN = "http://127.0.0.1:8000";
-  const MAX_KEYS = 128;
-  const MAX_KEY_LENGTH = 128;
-  const MAX_VALUE_LENGTH = 16_384;
+const vault = new MemoryVault();
+const status = document.querySelector("#connection-status");
+const keyInput = document.querySelector("#secret-key");
+const valueInput = document.querySelector("#secret-value");
+const saveButton = document.querySelector("#save-secret");
+const editorMessage = document.querySelector("#editor-message");
+const keyList = document.querySelector("#key-list");
+const keyCount = document.querySelector("#key-count");
 
-  const secrets = new Map();
-  let nextRevision = 1;
-  let brokerPort = null;
-
-  const status = document.querySelector("#connection-status");
-  const keyInput = document.querySelector("#secret-key");
-  const valueInput = document.querySelector("#secret-value");
-  const saveButton = document.querySelector("#save-secret");
-  const editorMessage = document.querySelector("#editor-message");
-  const keyList = document.querySelector("#key-list");
-  const keyCount = document.querySelector("#key-count");
-
-  window.addEventListener("message", (event) => {
-    const message = event.data;
-    if (event.source !== window.parent
-      || event.origin !== TRUSTED_HOST_ORIGIN
-      || message?.type !== "wb.connect"
-      || message?.protocol !== PROTOCOL_VERSION
-      || message?.role !== "privacy") {
-      return;
-    }
-
-    const port = event.ports?.[0] ?? message.port;
-    if (!port || typeof port.postMessage !== "function") return;
-    connect(port);
-  });
-
-  function connect(port) {
-    try {
-      brokerPort?.close();
-    } catch {
-      // Reconnection replaces the prior capability.
-    }
-
-    brokerPort = port;
-    brokerPort.onmessage = handleBrokerMessage;
-    brokerPort.onmessageerror = () => {
-      status.textContent = "Protocol error";
-      status.className = "status";
-    };
-    brokerPort.start();
-    brokerPort.postMessage({ type: "privacy.ready", protocol: PROTOCOL_VERSION });
-    sendCatalog();
-    status.textContent = "Broker connected";
-    status.className = "status ready";
+const provider = new VaultProvider({
+  vault,
+  trustedHostOrigin: "http://127.0.0.1:8000",
+  onConnectionChange({ connected }) {
+    status.textContent = connected ? "Broker connected" : "Waiting for broker";
+    status.className = connected ? "status ready" : "status waiting";
   }
+});
 
-  function handleBrokerMessage(event) {
-    const message = event.data;
-    if (message?.type !== "secret.resolve" || message?.protocol !== PROTOCOL_VERSION) return;
+function showEditorMessage(message, isError = false) {
+  editorMessage.textContent = message;
+  editorMessage.classList.toggle("error", isError);
+}
 
-    const replyPort = event.ports?.[0] ?? message.replyPort;
-    if (!replyPort || typeof replyPort.postMessage !== "function") return;
-
-    const entry = secrets.get(message.key);
-    if (!entry) {
-      sendResult(replyPort, {
-        ok: false,
-        error: { code: "not_found", message: "The privacy frame no longer has this key." }
-      });
-      return;
-    }
-    if (entry.revision !== message.revision) {
-      sendResult(replyPort, {
-        ok: false,
-        error: { code: "stale_revision", message: "The secret changed after access was granted." }
-      });
-      return;
-    }
-
-    sendResult(replyPort, { ok: true, value: entry.value });
-  }
-
-  function sendResult(port, result) {
-    try {
-      port.postMessage({ type: "secret.result", protocol: PROTOCOL_VERSION, ...result });
-    } finally {
-      port.close();
-    }
-  }
-
-  function sendCatalog() {
-    if (!brokerPort) return;
-    const entries = [...secrets.entries()]
-      .map(([key, entry]) => ({ key, revision: entry.revision }))
-      .sort((left, right) => left.key.localeCompare(right.key));
-    brokerPort.postMessage({
-      type: "privacy.catalog",
-      protocol: PROTOCOL_VERSION,
-      entries
-    });
-  }
-
-  function saveSecret() {
-    const key = keyInput.value.trim();
-    const value = valueInput.value;
-
-    if (key.length === 0 || key.length > MAX_KEY_LENGTH) {
-      showEditorMessage("Keys must contain 1–128 characters.", true);
-      return;
-    }
-    if (value.length === 0 || value.length > MAX_VALUE_LENGTH) {
-      showEditorMessage("Values must contain 1–16,384 characters.", true);
-      return;
-    }
-    if (!secrets.has(key) && secrets.size >= MAX_KEYS) {
-      showEditorMessage("This provider has reached its 128-key limit.", true);
-      return;
-    }
-
-    secrets.set(key, { value, revision: nextRevision++ });
+function saveSecret() {
+  try {
+    const { key } = vault.save(keyInput.value, valueInput.value);
     valueInput.value = "";
-    showEditorMessage(`Saved “${key}” in this frame’s memory.`);
-    renderKeys();
-    sendCatalog();
+    showEditorMessage(`Saved “${key}” in this page’s memory.`);
+  } catch (error) {
+    showEditorMessage(error.message, true);
+  }
+}
+
+function deleteSecret(key) {
+  if (!vault.delete(key)) return;
+  showEditorMessage(`Deleted “${key}”. Any grant was invalidated.`);
+}
+
+function renderKeys() {
+  const entries = vault.catalog();
+  keyCount.textContent = String(entries.length);
+  keyList.replaceChildren();
+
+  if (entries.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "No secrets are stored.";
+    keyList.append(empty);
+    return;
   }
 
-  function deleteSecret(key) {
-    if (!secrets.delete(key)) return;
-    showEditorMessage(`Deleted “${key}”. Any grant was invalidated.`);
-    renderKeys();
-    sendCatalog();
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "key-row";
+    const label = document.createElement("div");
+    const keyName = document.createElement("code");
+    keyName.textContent = entry.key;
+    const revision = document.createElement("span");
+    revision.className = "key-meta";
+    revision.textContent = `revision ${entry.revision}`;
+    label.append(keyName, revision);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => deleteSecret(entry.key));
+    row.append(label, remove);
+    keyList.append(row);
   }
+}
 
-  function showEditorMessage(message, isError = false) {
-    editorMessage.textContent = message;
-    editorMessage.classList.toggle("error", isError);
-  }
-
-  function renderKeys() {
-    keyCount.textContent = String(secrets.size);
-    keyList.replaceChildren();
-
-    if (secrets.size === 0) {
-      const empty = document.createElement("p");
-      empty.className = "empty";
-      empty.textContent = "No secrets are stored.";
-      keyList.append(empty);
-      return;
-    }
-
-    for (const [key, entry] of [...secrets.entries()].sort(([left], [right]) => left.localeCompare(right))) {
-      const row = document.createElement("div");
-      row.className = "key-row";
-      const label = document.createElement("div");
-      const keyName = document.createElement("code");
-      keyName.textContent = key;
-      const revision = document.createElement("span");
-      revision.className = "key-meta";
-      revision.textContent = `revision ${entry.revision}`;
-      label.append(keyName, revision);
-
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "danger";
-      remove.textContent = "Delete";
-      remove.addEventListener("click", () => deleteSecret(key));
-      row.append(label, remove);
-      keyList.append(row);
-    }
-  }
-
-  saveButton.addEventListener("click", saveSecret);
-  valueInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") saveSecret();
-  });
-  renderKeys();
-}());
+saveButton.addEventListener("click", saveSecret);
+valueInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") saveSecret();
+});
+vault.subscribe(renderKeys);
+provider.listen();
+renderKeys();

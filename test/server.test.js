@@ -32,6 +32,43 @@ test("component origins can only be framed by the fixed host origin", () => {
     assert.match(csp, /connect-src 'none'/);
     assert.match(csp, /form-action 'none'/);
   }
+  assert.equal(securityHeaders("privacy")["Access-Control-Allow-Origin"], "*");
+});
+
+test("component origins expose only their required SDK source modules", async (context) => {
+  for (const [role, assets] of Object.entries({
+    task: {
+      public: ["/runtime-sdk/index.js", "/task-example/index.js", "/task-example/task.js"],
+      private: ["/runtime-sdk/index.test.js", "/task-example/task.test.js"]
+    },
+    privacy: {
+      public: ["/vault-sdk/index.js"],
+      private: ["/vault-sdk/index.test.js"]
+    }
+  })) {
+    await context.test(role, async () => {
+      const server = createOriginServer(role);
+      await new Promise((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", resolve);
+      });
+
+      try {
+        const address = server.address();
+        for (const path of assets.public) {
+          const response = await fetch(`http://127.0.0.1:${address.port}${path}`);
+          assert.equal(response.status, 200);
+          assert.match(response.headers.get("content-type"), /text\/javascript/);
+        }
+        for (const path of assets.private) {
+          const response = await fetch(`http://127.0.0.1:${address.port}${path}`);
+          assert.equal(response.status, 404);
+        }
+      } finally {
+        await new Promise((resolve) => server.close(resolve));
+      }
+    });
+  }
 });
 
 test("the launcher creates one initially-stopped server per role", () => {

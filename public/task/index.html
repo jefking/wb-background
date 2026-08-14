@@ -9,26 +9,25 @@
   <body>
     <header>
       <div>
-        <p class="eyebrow">Sample task / every 5 seconds</p>
+        <p class="eyebrow">Runtime SDK example</p>
         <h1>Heartbeat</h1>
       </div>
-      <span id="connection-status" class="status waiting">Waiting for broker</span>
+      <span class="status ready">Every 5 seconds</span>
     </header>
 
     <section class="task-config">
-      <label for="secret-key">Secret key requested by this task</label>
-      <input id="secret-key" value="demo.secret" maxlength="128" autocomplete="off" spellcheck="false">
-      <p>Only one request may be in flight. Successful values are masked and released after each run.</p>
+      <h2>Registered task</h2>
+      <p><code>heartbeat</code> requests <code>demo.secret</code> through the runtime’s <code>getSecret</code> hook.</p>
     </section>
 
     <section class="activity">
       <div class="activity-heading">
-        <h2>Task activity</h2>
-        <span id="run-state">Idle</span>
+        <h2>Output</h2>
+        <span id="run-state">Browser console</span>
       </div>
-      <ol id="activity-log" aria-live="polite"></ol>
+      <p>Approve the request in the host. Each completed run prints a message without printing the secret value.</p>
     </section>
 
-    <script src="/task.js"></script>
+    <script type="module" src="/task-example/index.js"></script>
   </body>
 </html>

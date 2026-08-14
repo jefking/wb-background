@@ -324,6 +324,12 @@ h2 {
   font-size: 0.7rem;
 }
 
+.task-registration {
+  margin: -4px 0 10px;
+  color: #b9b5a9;
+  font: 0.7rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 iframe {
   display: block;
   width: 100%;

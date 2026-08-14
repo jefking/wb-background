@@ -116,6 +116,28 @@ test("pending requests and catalogs are bounded", () => {
   });
 });
 
+test("task registrations retain explicit schedule frequencies", () => {
+  const state = new BrokerState();
+  assert.deepEqual(state.registerTask({ taskId: "heartbeat", frequencyMs: 5_000 }), {
+    ok: true,
+    taskId: "heartbeat",
+    frequencyMs: 5_000
+  });
+  assert.deepEqual(state.registerTask({ taskId: "manual" }), {
+    ok: true,
+    taskId: "manual",
+    frequencyMs: null
+  });
+  assert.deepEqual(state.snapshot().tasks, [
+    { taskId: "heartbeat", frequencyMs: 5_000 },
+    { taskId: "manual", frequencyMs: null }
+  ]);
+  assert.equal(state.unregisterTask("manual"), true);
+  assert.equal(state.snapshot().tasks.length, 1);
+  state.resetTask();
+  assert.deepEqual(state.snapshot().tasks, []);
+});
+
 test("frame URL validation requires mutually distinct HTTP(S) origins", () => {
   assert.deepEqual(
     validateFrameUrl("not a url", { hostOrigin: "http://127.0.0.1:8000" }).error,

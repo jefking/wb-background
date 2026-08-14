@@ -3,6 +3,8 @@ export const PROTOCOL_VERSION = 1;
 export const LIMITS = Object.freeze({
   keyLength: 128,
   requestIdLength: 96,
+  taskIdLength: 96,
+  registeredTasks: 32,
   pendingRequests: 32,
   catalogEntries: 128
 });
@@ -50,6 +52,16 @@ function validRevision(revision) {
   return Number.isSafeInteger(revision) && revision > 0;
 }
 
+function normalizeTaskId(taskId) {
+  if (typeof taskId !== "string") return null;
+  const normalized = taskId.trim();
+  return normalized.length > 0 && normalized.length <= LIMITS.taskIdLength ? normalized : null;
+}
+
+function validFrequency(frequencyMs) {
+  return frequencyMs === null || (Number.isSafeInteger(frequencyMs) && frequencyMs > 0);
+}
+
 export class BrokerState {
   constructor() {
     this.taskGeneration = 0;
@@ -57,6 +69,7 @@ export class BrokerState {
     this.catalog = new Map();
     this.grants = new Map();
     this.pending = new Map();
+    this.tasks = new Map();
   }
 
   resetTask() {
@@ -64,6 +77,7 @@ export class BrokerState {
     this.taskGeneration += 1;
     this.grants.clear();
     this.pending.clear();
+    this.tasks.clear();
     return result;
   }
 
@@ -81,6 +95,23 @@ export class BrokerState {
       pendingRequestIds: [...this.pending.keys()],
       revokedKeys: [...this.grants.keys()]
     };
+  }
+
+  registerTask({ taskId, frequencyMs = null } = {}) {
+    const id = normalizeTaskId(taskId);
+    if (!id || !validFrequency(frequencyMs)) {
+      return { ok: false, error: "invalid_task_registration" };
+    }
+    if (!this.tasks.has(id) && this.tasks.size >= LIMITS.registeredTasks) {
+      return { ok: false, error: "too_many_registered_tasks" };
+    }
+    this.tasks.set(id, { frequencyMs });
+    return { ok: true, taskId: id, frequencyMs };
+  }
+
+  unregisterTask(taskId) {
+    const id = normalizeTaskId(taskId);
+    return id ? this.tasks.delete(id) : false;
   }
 
   setCatalog(entries) {
@@ -186,6 +217,9 @@ export class BrokerState {
     return {
       taskGeneration: this.taskGeneration,
       privacyGeneration: this.privacyGeneration,
+      tasks: [...this.tasks.entries()]
+        .sort(byKey)
+        .map(([taskId, task]) => ({ taskId, ...task })),
       catalog: [...this.catalog.entries()].sort(byKey).map(([key, revision]) => ({ key, revision })),
       grants: [...this.grants.entries()].sort(byKey).map(([key, grant]) => ({ key, ...grant })),
       pending: [...this.pending.entries()].map(([requestId, request]) => ({ requestId, ...request }))

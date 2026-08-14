@@ -14,6 +14,7 @@ const elements = {
   grantCount: document.querySelector("#grant-count"),
   catalogList: document.querySelector("#catalog-list"),
   catalogCount: document.querySelector("#catalog-count"),
+  taskRegistration: document.querySelector("#task-registration"),
   notice: document.querySelector("#shell-notice")
 };
 
@@ -170,7 +171,25 @@ function handleTaskMessage(session, event) {
     markReady(session, message.type);
     return;
   }
-  if (!session.ready || message.type !== "secret.request") return;
+  if (!session.ready) return;
+
+  if (message.type === "task.register") {
+    const result = broker.registerTask(message);
+    if (!result.ok) {
+      setFrameStatus(session, "Invalid task", "error");
+      setNotice("The task frame sent invalid schedule metadata.", true);
+    }
+    renderBroker();
+    return;
+  }
+
+  if (message.type === "task.unregister") {
+    broker.unregisterTask(message.taskId);
+    renderBroker();
+    return;
+  }
+
+  if (message.type !== "secret.request") return;
 
   const replyPort = event.ports?.[0] ?? message.replyPort;
   if (!isMessagePort(replyPort)) return;
@@ -298,6 +317,11 @@ function renderBroker() {
   elements.pendingCount.textContent = String(snapshot.pending.length);
   elements.grantCount.textContent = String(snapshot.grants.length);
   elements.catalogCount.textContent = String(snapshot.catalog.length);
+  elements.taskRegistration.textContent = snapshot.tasks.length === 0
+    ? "No task has registered yet."
+    : snapshot.tasks.map(({ taskId, frequencyMs }) => frequencyMs === null
+      ? `${taskId} · manual`
+      : `${taskId} · every ${formatFrequency(frequencyMs)}`).join(" · ");
 
   elements.pendingList.replaceChildren();
   if (snapshot.pending.length === 0) {
@@ -375,6 +399,10 @@ function renderBroker() {
       elements.catalogList.append(pill);
     }
   }
+}
+
+function formatFrequency(frequencyMs) {
+  return frequencyMs % 1_000 === 0 ? `${frequencyMs / 1_000}s` : `${frequencyMs}ms`;
 }
 
 function emptyMessage(text) {

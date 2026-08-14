@@ -6,6 +6,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 
+const sourceAssets = Object.freeze({
+  task: Object.freeze({
+    "/runtime-sdk/index.js": resolve(projectRoot, "src/runtime-sdk/index.js"),
+    "/task-example/index.js": resolve(projectRoot, "src/task-example/index.js"),
+    "/task-example/task.js": resolve(projectRoot, "src/task-example/task.js")
+  }),
+  privacy: Object.freeze({
+    "/vault-sdk/index.js": resolve(projectRoot, "src/vault-sdk/index.js")
+  })
+});
+
 export const ORIGINS = Object.freeze({
   host: Object.freeze({ role: "host", port: 8000, root: resolve(projectRoot, "public/host") }),
   task: Object.freeze({ role: "task", port: 8001, root: resolve(projectRoot, "public/task") }),
@@ -74,16 +85,21 @@ export function securityHeaders(role) {
     throw new TypeError(`Unknown origin role: ${role}`);
   }
 
-  return Object.freeze({
+  const headers = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": contentSecurityPolicies[role],
     "Permissions-Policy": permissionsPolicy,
     "Referrer-Policy": "strict-origin",
     "X-Content-Type-Options": "nosniff"
-  });
+  };
+
+  // A sandboxed privacy frame has an opaque origin. CORS permits its ES module
+  // graph to load without weakening the iframe's same-origin isolation.
+  if (role === "privacy") headers["Access-Control-Allow-Origin"] = "*";
+  return Object.freeze(headers);
 }
 
-function resolveRequestPath(root, requestUrl) {
+function resolveRequestPath(root, requestUrl, assets = {}) {
   let pathname;
   try {
     pathname = decodeURIComponent(new URL(requestUrl, "http://local.invalid").pathname);
@@ -93,6 +109,8 @@ function resolveRequestPath(root, requestUrl) {
 
   if (pathname === "/") pathname = "/index.html";
   if (pathname.includes("\0")) return null;
+
+  if (Object.hasOwn(assets, pathname)) return assets[pathname];
 
   const candidate = resolve(root, `.${pathname}`);
   if (candidate !== root && !candidate.startsWith(`${root}${sep}`)) return null;
@@ -113,6 +131,7 @@ export function createOriginServer(role, options = {}) {
   if (!config) throw new TypeError(`Unknown origin role: ${role}`);
 
   const root = options.root ?? config.root;
+  const assets = options.assets ?? sourceAssets[role];
   const headers = securityHeaders(role);
 
   return createServer(async (request, response) => {
@@ -122,7 +141,7 @@ export function createOriginServer(role, options = {}) {
       return;
     }
 
-    const filePath = resolveRequestPath(root, request.url ?? "/");
+    const filePath = resolveRequestPath(root, request.url ?? "/", assets);
     if (!filePath) {
       sendText(response, 400, "Bad request\n", headers);
       return;
