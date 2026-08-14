@@ -91,7 +91,7 @@ h2 {
 
 .editor {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 0.8fr 1fr 1.4fr auto;
   gap: 6px 8px;
   margin-top: 12px;
 }
@@ -101,21 +101,21 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .editor label {
   color: #46736d;
   font-size: 0.68rem;
   font-weight: 800;
 }
 
-.editor label:first-of-type {
-  grid-column: 1;
-}
-
-.editor label:last-of-type {
-  grid-column: 2;
-}
-
-.editor input {
+.editor input,
+.editor select {
   min-width: 0;
   border: 1px solid #8cbab4;
   border-radius: 7px;
@@ -123,6 +123,10 @@ h2 {
   background: #fafffd;
   color: #173330;
   font: 0.78rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.editor select {
+  appearance: none;
 }
 
 button {
@@ -184,6 +188,38 @@ button.danger {
 
 .key-row code {
   font: 0.75rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.entry-kind {
+  display: inline-block;
+  border: 1px solid #8bb7b1;
+  border-radius: 999px;
+  margin-left: 7px;
+  padding: 2px 6px;
+  color: #42716b;
+  font-size: 0.58rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.entry-kind.secret {
+  border-color: #a992bd;
+  color: #76578e;
+}
+
+.entry-value {
+  display: block;
+  max-width: 26rem;
+  margin-top: 5px;
+  color: #315f59;
+  font: 0.68rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.entry-value.secret {
+  color: #76578e;
+  font-family: inherit;
+  font-style: italic;
 }
 
 .key-meta {

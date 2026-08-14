@@ -1,10 +1,11 @@
 export function registerExampleTask(runtime, log = console.log) {
   return runtime.registerTask({
-    id: "heartbeat",
+    id: "weather-heartbeat",
     frequencyMs: 5_000,
-    async run({ getSecret }) {
-      const secret = await getSecret("demo.secret");
-      log(`heartbeat called with a ${secret.length}-character secret`);
+    actions: ["weather.current"],
+    async run({ invoke }) {
+      const weather = await invoke("weather.current", {});
+      log(`${weather.temperatureC}°C · ${weather.condition} · ${weather.humidity}% humidity`);
     }
   });
 }

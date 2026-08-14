@@ -16,22 +16,33 @@
     </header>
 
     <div class="notice">
-      Values stay in this iframe’s memory. Reloading or swapping this frame erases them.
+      Values stay in this iframe’s memory. Variables are visible here; secrets are masked but are not encrypted yet. Reloading or swapping this frame erases everything.
     </div>
 
     <section class="editor" aria-labelledby="editor-title">
-      <h2 id="editor-title">Add or update a secret</h2>
-      <label for="secret-key">Key</label>
-      <input id="secret-key" value="demo.secret" maxlength="128" autocomplete="off" spellcheck="false">
-      <label for="secret-value">Value</label>
-      <input id="secret-value" type="password" maxlength="16384" autocomplete="new-password" spellcheck="false">
-      <button id="save-secret" type="button">Save in memory</button>
+      <h2 id="editor-title">Add or update a vault entry</h2>
+      <div class="field">
+        <label for="entry-kind">Type</label>
+        <select id="entry-kind">
+          <option value="secret" selected>Secret · hidden</option>
+          <option value="variable">Variable · visible</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="entry-key">Key</label>
+        <input id="entry-key" value="weather.city" maxlength="128" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field value-field">
+        <label for="entry-value">Value</label>
+        <input id="entry-value" type="password" maxlength="16384" autocomplete="new-password" spellcheck="false" placeholder="e.g. Vancouver">
+      </div>
+      <button id="save-entry" type="button">Save in memory</button>
       <p id="editor-message" aria-live="polite"></p>
     </section>
 
     <section class="inventory" aria-labelledby="inventory-title">
       <div class="inventory-heading">
-        <h2 id="inventory-title">Stored keys</h2>
+        <h2 id="inventory-title">Stored entries</h2>
         <span id="key-count">0</span>
       </div>
       <div id="key-list" aria-live="polite"></div>

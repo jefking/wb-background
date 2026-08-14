@@ -3,21 +3,21 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sample Background Task</title>
+    <title>Weather Background Task</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <header>
       <div>
         <p class="eyebrow">Runtime SDK example</p>
-        <h1>Heartbeat</h1>
+        <h1>Weather pulse</h1>
       </div>
       <span class="status ready">Every 5 seconds</span>
     </header>
 
     <section class="task-config">
       <h2>Registered task</h2>
-      <p><code>heartbeat</code> requests <code>demo.secret</code> through the runtime’s <code>getSecret</code> hook.</p>
+      <p><code>weather-heartbeat</code> invokes the Host-owned <code>weather.current</code> action. The task supplies no URL, request headers, or vault key.</p>
     </section>
 
     <section class="activity">
@@ -25,9 +25,9 @@
         <h2>Output</h2>
         <span id="run-state">Waiting for approval</span>
       </div>
-      <p>Approve the request in the host. Completed runs appear here every five seconds without printing the secret value.</p>
+      <p>Save <code>weather.city</code> in the Privacy frame and approve the action. Sanitized weather results appear every five seconds; the city never enters this frame.</p>
       <p id="activity-empty" class="empty">No completed runs yet.</p>
-      <ol id="activity-log" aria-label="Heartbeat run history" aria-live="polite"></ol>
+      <ol id="activity-log" aria-label="Weather action run history" aria-live="polite"></ol>
     </section>
 
     <script type="module" src="/task-example/index.js"></script>

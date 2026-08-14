@@ -2,9 +2,10 @@ import { MemoryVault, VaultProvider } from "/vault-sdk/index.js";
 
 const vault = new MemoryVault();
 const status = document.querySelector("#connection-status");
-const keyInput = document.querySelector("#secret-key");
-const valueInput = document.querySelector("#secret-value");
-const saveButton = document.querySelector("#save-secret");
+const kindInput = document.querySelector("#entry-kind");
+const keyInput = document.querySelector("#entry-key");
+const valueInput = document.querySelector("#entry-value");
+const saveButton = document.querySelector("#save-entry");
 const editorMessage = document.querySelector("#editor-message");
 const keyList = document.querySelector("#key-list");
 const keyCount = document.querySelector("#key-count");
@@ -23,17 +24,17 @@ function showEditorMessage(message, isError = false) {
   editorMessage.classList.toggle("error", isError);
 }
 
-function saveSecret() {
+function saveEntry() {
   try {
-    const { key } = vault.save(keyInput.value, valueInput.value);
+    const { key, kind } = vault.save(keyInput.value, valueInput.value, { kind: kindInput.value });
     valueInput.value = "";
-    showEditorMessage(`Saved “${key}” in this page’s memory.`);
+    showEditorMessage(`Saved ${kind} “${key}” in this page’s memory.`);
   } catch (error) {
     showEditorMessage(error.message, true);
   }
 }
 
-function deleteSecret(key) {
+function deleteEntry(key) {
   if (!vault.delete(key)) return;
   showEditorMessage(`Deleted “${key}”. Any grant was invalidated.`);
 }
@@ -57,25 +58,41 @@ function renderKeys() {
     const label = document.createElement("div");
     const keyName = document.createElement("code");
     keyName.textContent = entry.key;
+    const kind = document.createElement("span");
+    kind.className = `entry-kind ${entry.kind}`;
+    kind.textContent = entry.kind;
     const revision = document.createElement("span");
     revision.className = "key-meta";
     revision.textContent = `revision ${entry.revision}`;
-    label.append(keyName, revision);
+    const value = document.createElement("span");
+    value.className = `entry-value ${entry.kind}`;
+    value.textContent = entry.kind === "variable"
+      ? vault.get(entry.key)
+      : "Hidden in UI · plaintext in page memory";
+    label.append(keyName, kind, revision, value);
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "danger";
     remove.textContent = "Delete";
-    remove.addEventListener("click", () => deleteSecret(entry.key));
+    remove.addEventListener("click", () => deleteEntry(entry.key));
     row.append(label, remove);
     keyList.append(row);
   }
 }
 
-saveButton.addEventListener("click", saveSecret);
+function syncEntryKind() {
+  const isSecret = kindInput.value === "secret";
+  valueInput.type = isSecret ? "password" : "text";
+  valueInput.autocomplete = isSecret ? "new-password" : "off";
+}
+
+saveButton.addEventListener("click", saveEntry);
 valueInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") saveSecret();
+  if (event.key === "Enter") saveEntry();
 });
+kindInput.addEventListener("change", syncEntryKind);
 vault.subscribe(renderKeys);
 provider.listen();
+syncEntryKind();
 renderKeys();

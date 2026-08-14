@@ -11,9 +11,9 @@
       <div>
         <p class="eyebrow">Browser-brokered capabilities</p>
         <h1>Window Broker</h1>
-        <p class="lede">The shell decides which task may read which key. Secret values travel directly from the privacy frame to the task.</p>
+        <p class="lede">The shell approves declarative actions. Vault values are resolved only inside trusted Host implementations and are never delivered to task code.</p>
       </div>
-      <div class="protocol-badge" title="Window Broker protocol version">WB / v1</div>
+      <div class="protocol-badge" title="Window Broker protocol version">WB / v2</div>
     </header>
 
     <section class="broker-board" aria-label="Browser permission controls">
@@ -21,7 +21,7 @@
         <div class="card-heading">
           <div>
             <p class="eyebrow">Browser decision</p>
-            <h2>Pending requests</h2>
+            <h2>Pending actions</h2>
           </div>
           <span id="pending-count" class="count">0</span>
         </div>
@@ -31,8 +31,8 @@
       <article class="broker-card">
         <div class="card-heading">
           <div>
-            <p class="eyebrow">Current task document</p>
-            <h2>Active grants</h2>
+            <p class="eyebrow">Task-scoped permissions</p>
+            <h2>Active action grants</h2>
           </div>
           <span id="grant-count" class="count">0</span>
         </div>
@@ -42,8 +42,8 @@
       <article class="broker-card">
         <div class="card-heading">
           <div>
-            <p class="eyebrow">Names only</p>
-            <h2>Privacy catalog</h2>
+            <p class="eyebrow">Metadata only</p>
+            <h2>Vault catalog</h2>
           </div>
           <span id="catalog-count" class="count">0</span>
         </div>
@@ -107,7 +107,7 @@
     </main>
 
     <footer>
-      Revocation blocks future reads. A task can retain or transmit any plaintext it has already received.
+      Tasks receive only bounded, sanitized action results. Variables and secrets remain inside the trusted Privacy/Host boundary.
     </footer>
 
     <script type="module" src="/host.js"></script>

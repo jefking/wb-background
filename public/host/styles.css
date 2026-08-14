@@ -200,6 +200,18 @@ h2 {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.grant-row strong {
+  display: block;
+  font-size: 0.78rem;
+}
+
+.grant-meta {
+  display: block;
+  margin-top: 3px;
+  color: #8d919c;
+  font: 0.66rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .request-meta {
   margin: 5px 0 10px;
   color: #8d919c;
@@ -234,6 +246,16 @@ h2 {
   padding: 5px 9px;
   color: #b9deda;
   font-size: 0.74rem;
+}
+
+.key-pill.secret {
+  border-color: #60476e;
+  color: #d7b9e3;
+}
+
+.key-pill.variable {
+  border-color: #37645f;
+  color: #9edbd5;
 }
 
 .shell-notice {

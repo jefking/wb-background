@@ -124,7 +124,7 @@ export class TaskRuntime {
     this.handleWindowMessage = this.handleWindowMessage.bind(this);
   }
 
-  /** Listen for the WB/v1 capability port sent by the trusted host page. */
+  /** Listen for the WB/v2 capability port sent by the trusted host page. */
   listen(windowTarget = globalThis.window) {
     if (!windowTarget || typeof windowTarget.addEventListener !== "function") {
       throw new RuntimeError("unsupported", "A browser window is required to listen for the host.");
