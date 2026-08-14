@@ -39,7 +39,8 @@ const contentTypes = Object.freeze({
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8"
+  ".md": "text/markdown; charset=utf-8",
+  ".svg": "image/svg+xml"
 });
 
 const permissionsPolicy = [
@@ -59,7 +60,7 @@ const contentSecurityPolicies = Object.freeze({
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
-    "img-src 'none'",
+    "img-src 'self'",
     `connect-src ${WEATHER_SERVICE.origin}`,
     "frame-src http://127.0.0.1:8001 http://127.0.0.1:8002",
     "object-src 'none'",

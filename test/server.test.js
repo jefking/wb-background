@@ -24,10 +24,18 @@ test("each configured origin has its own HTML entrypoint", async () => {
 test("component frames stay opaque and the task page exposes run history", async () => {
   const hostHtml = await readFile(`${ORIGINS.host.root}/index.html`, "utf8");
   const taskHtml = await readFile(`${ORIGINS.task.root}/index.html`, "utf8");
+  const privacyHtml = await readFile(`${ORIGINS.privacy.root}/index.html`, "utf8");
   assert.equal((hostHtml.match(/sandbox="allow-scripts"/g) ?? []).length, 2);
   assert.doesNotMatch(hostHtml, /allow-same-origin/);
+  assert.match(hostHtml, /<img class="brand-logo" src="\/logo\.svg"/);
+  assert.match(hostHtml, /id="frame-resizer"/);
+  assert.match(hostHtml, /lucide-grip-vertical/);
   assert.match(taskHtml, /id="activity-log"/);
   assert.match(taskHtml, /every five seconds/i);
+  assert.doesNotMatch(privacyHtml, /<select\b/);
+  assert.match(privacyHtml, /class="lucide lucide-lock-keyhole"/);
+  assert.match(privacyHtml, /class="lucide lucide-eye"/);
+  assert.equal((privacyHtml.match(/data-entry-kind=/g) ?? []).length, 2);
 });
 
 test("the host cannot be framed and restricts frames and action networking", () => {
@@ -38,7 +46,26 @@ test("the host cannot be framed and restricts frames and action networking", () 
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /frame-src http:\/\/127\.0\.0\.1:8001 http:\/\/127\.0\.0\.1:8002/);
   assert.match(csp, /connect-src http:\/\/127\.0\.0\.1:8003/);
+  assert.match(csp, /img-src 'self'/);
   assert.match(csp, /object-src 'none'/);
+});
+
+test("the host serves its logo as a same-origin SVG image", async () => {
+  const server = createOriginServer("host");
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  try {
+    const address = server.address();
+    const response = await fetch(`http://127.0.0.1:${address.port}/logo.svg`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/svg+xml");
+    assert.match(await response.text(), /<svg\b/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test("component origins can only be framed by the fixed host origin", () => {

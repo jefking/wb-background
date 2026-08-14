@@ -2,13 +2,15 @@ import { MemoryVault, VaultProvider } from "/vault-sdk/index.js";
 
 const vault = new MemoryVault();
 const status = document.querySelector("#connection-status");
-const kindInput = document.querySelector("#entry-kind");
+const kindToggle = document.querySelector("#entry-kind");
+const kindButtons = [...kindToggle.querySelectorAll("[data-entry-kind]")];
 const keyInput = document.querySelector("#entry-key");
 const valueInput = document.querySelector("#entry-value");
 const saveButton = document.querySelector("#save-entry");
 const editorMessage = document.querySelector("#editor-message");
 const keyList = document.querySelector("#key-list");
 const keyCount = document.querySelector("#key-count");
+let selectedEntryKind = "secret";
 
 const provider = new VaultProvider({
   vault,
@@ -26,7 +28,7 @@ function showEditorMessage(message, isError = false) {
 
 function saveEntry() {
   try {
-    const { key, kind } = vault.save(keyInput.value, valueInput.value, { kind: kindInput.value });
+    const { key, kind } = vault.save(keyInput.value, valueInput.value, { kind: selectedEntryKind });
     valueInput.value = "";
     showEditorMessage(`Saved ${kind} “${key}” in this page’s memory.`);
   } catch (error) {
@@ -81,8 +83,15 @@ function renderKeys() {
   }
 }
 
-function syncEntryKind() {
-  const isSecret = kindInput.value === "secret";
+function setEntryKind(kind, { focus = false } = {}) {
+  if (kind !== "secret" && kind !== "variable") return;
+  selectedEntryKind = kind;
+  for (const button of kindButtons) {
+    const selected = button.dataset.entryKind === kind;
+    button.setAttribute("aria-pressed", String(selected));
+    if (selected && focus) button.focus();
+  }
+  const isSecret = kind === "secret";
   valueInput.type = isSecret ? "password" : "text";
   valueInput.autocomplete = isSecret ? "new-password" : "off";
 }
@@ -91,8 +100,15 @@ saveButton.addEventListener("click", saveEntry);
 valueInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") saveEntry();
 });
-kindInput.addEventListener("change", syncEntryKind);
+for (const button of kindButtons) {
+  button.addEventListener("click", () => setEntryKind(button.dataset.entryKind));
+}
+kindToggle.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+  event.preventDefault();
+  setEntryKind(event.key === "ArrowLeft" ? "secret" : "variable", { focus: true });
+});
 vault.subscribe(renderKeys);
 provider.listen();
-syncEntryKind();
+setEntryKind(selectedEntryKind);
 renderKeys();

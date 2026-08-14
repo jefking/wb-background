@@ -1,6 +1,12 @@
 import { ActionRegistry } from "/action-sdk/index.js";
 import { createWeatherAction } from "/action-example/weather.js";
 import { BrokerState, PROTOCOL_VERSION, validateFrameUrl } from "/broker-core.js";
+import {
+  DEFAULT_SPLIT_RATIO,
+  clampSplitRatio,
+  splitRatioBounds,
+  splitRatioFromPointer
+} from "/split-pane.js";
 
 const DEFAULT_TASK_URL = "http://127.0.0.1:8001/";
 const DEFAULT_PRIVACY_URL = "http://127.0.0.1:8002/";
@@ -27,8 +33,13 @@ const elements = {
   catalogList: document.querySelector("#catalog-list"),
   catalogCount: document.querySelector("#catalog-count"),
   taskRegistration: document.querySelector("#task-registration"),
-  notice: document.querySelector("#shell-notice")
+  notice: document.querySelector("#shell-notice"),
+  frameGrid: document.querySelector(".frame-grid"),
+  frameResizer: document.querySelector("#frame-resizer")
 };
+
+let frameSplitRatio = DEFAULT_SPLIT_RATIO;
+let resizePointerId = null;
 
 const frames = {
   task: createFrameSession("task"),
@@ -60,6 +71,85 @@ function setNotice(message, isError = false) {
 function setFrameStatus(session, label, state = "waiting") {
   session.status.textContent = label;
   session.status.className = `status ${state}`;
+}
+
+function frameSplitGeometry() {
+  const containerWidth = elements.frameGrid.getBoundingClientRect().width;
+  const dividerWidth = elements.frameResizer.getBoundingClientRect().width;
+  return {
+    containerWidth,
+    dividerWidth,
+    availableWidth: containerWidth - dividerWidth
+  };
+}
+
+function setFrameSplit(ratio) {
+  const { availableWidth } = frameSplitGeometry();
+  if (availableWidth <= 0) return;
+  frameSplitRatio = clampSplitRatio(ratio, availableWidth);
+  const bounds = splitRatioBounds(availableWidth);
+  const percentage = Math.round(frameSplitRatio * 100);
+  elements.frameGrid.style.setProperty("--task-pane-width", `${availableWidth * frameSplitRatio}px`);
+  elements.frameResizer.setAttribute("aria-valuemin", String(Math.round(bounds.minimum * 100)));
+  elements.frameResizer.setAttribute("aria-valuemax", String(Math.round(bounds.maximum * 100)));
+  elements.frameResizer.setAttribute("aria-valuenow", String(percentage));
+  elements.frameResizer.setAttribute(
+    "aria-valuetext",
+    `Task ${percentage}%, Privacy ${100 - percentage}%`
+  );
+}
+
+function setFrameSplitFromPointer(event) {
+  const container = elements.frameGrid.getBoundingClientRect();
+  const dividerWidth = elements.frameResizer.getBoundingClientRect().width;
+  setFrameSplit(splitRatioFromPointer({
+    clientX: event.clientX,
+    containerLeft: container.left,
+    containerWidth: container.width,
+    dividerWidth
+  }));
+}
+
+function finishFrameResize(event) {
+  if (resizePointerId === null || (event?.pointerId !== undefined && event.pointerId !== resizePointerId)) {
+    return;
+  }
+  resizePointerId = null;
+  elements.frameResizer.classList.remove("dragging");
+  document.body.classList.remove("frame-resizing");
+}
+
+function initializeFrameResizer() {
+  const separator = elements.frameResizer;
+  separator.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    resizePointerId = event.pointerId;
+    separator.setPointerCapture(event.pointerId);
+    separator.classList.add("dragging");
+    document.body.classList.add("frame-resizing");
+    setFrameSplitFromPointer(event);
+  });
+  separator.addEventListener("pointermove", (event) => {
+    if (event.pointerId === resizePointerId) setFrameSplitFromPointer(event);
+  });
+  separator.addEventListener("pointerup", finishFrameResize);
+  separator.addEventListener("pointercancel", finishFrameResize);
+  separator.addEventListener("lostpointercapture", finishFrameResize);
+  separator.addEventListener("dblclick", () => setFrameSplit(DEFAULT_SPLIT_RATIO));
+  separator.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 0.1 : 0.025;
+    let nextRatio = frameSplitRatio;
+    if (event.key === "ArrowLeft") nextRatio -= step;
+    else if (event.key === "ArrowRight") nextRatio += step;
+    else if (event.key === "Home") nextRatio = 0;
+    else if (event.key === "End") nextRatio = 1;
+    else return;
+    event.preventDefault();
+    setFrameSplit(nextRatio);
+  });
+  window.addEventListener("resize", () => setFrameSplit(frameSplitRatio));
+  setFrameSplit(DEFAULT_SPLIT_RATIO);
 }
 
 function isMessagePort(value) {
@@ -628,6 +718,7 @@ for (const session of Object.values(frames)) {
 
 frames.task.input.value = DEFAULT_TASK_URL;
 frames.privacy.input.value = DEFAULT_PRIVACY_URL;
+initializeFrameResizer();
 renderBroker();
 loadFrame("task", DEFAULT_TASK_URL);
 loadFrame("privacy", DEFAULT_PRIVACY_URL);

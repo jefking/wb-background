@@ -8,10 +8,13 @@
   </head>
   <body>
     <header class="masthead">
-      <div>
-        <p class="eyebrow">Browser-brokered capabilities</p>
-        <h1>Window Broker</h1>
-        <p class="lede">The shell approves declarative actions. Vault values are resolved only inside trusted Host implementations and are never delivered to task code.</p>
+      <div class="masthead-brand">
+        <img class="brand-logo" src="/logo.svg" alt="" width="1080" height="1080" aria-hidden="true">
+        <div class="masthead-copy">
+          <p class="eyebrow">Browser-brokered capabilities</p>
+          <h1>Window Broker</h1>
+          <p class="lede">The shell approves declarative actions. Vault values are resolved only inside trusted Host implementations and are never delivered to task code.</p>
+        </div>
       </div>
       <div class="protocol-badge" title="Window Broker protocol version">WB / v2</div>
     </header>
@@ -79,6 +82,43 @@
           allow="camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; usb 'none'; clipboard-read 'none'; clipboard-write 'none'"
         ></iframe>
       </section>
+
+      <div
+        id="frame-resizer"
+        class="frame-resizer"
+        role="separator"
+        aria-label="Resize Task and Privacy frames"
+        aria-controls="task-frame privacy-frame"
+        aria-orientation="vertical"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="50"
+        tabindex="0"
+        title="Drag to resize · Arrow keys adjust · Double-click resets"
+      >
+        <span class="frame-resizer-handle">
+          <svg
+            class="lucide lucide-grip-vertical"
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="9" cy="5" r="1"></circle>
+            <circle cx="9" cy="12" r="1"></circle>
+            <circle cx="9" cy="19" r="1"></circle>
+            <circle cx="15" cy="5" r="1"></circle>
+            <circle cx="15" cy="12" r="1"></circle>
+            <circle cx="15" cy="19" r="1"></circle>
+          </svg>
+        </span>
+      </div>
 
       <section class="frame-panel privacy-panel">
         <div class="frame-heading">

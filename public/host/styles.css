@@ -71,6 +71,24 @@ button:disabled {
   margin: 0 auto 22px;
 }
 
+.masthead-brand {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 18px;
+}
+
+.brand-logo {
+  flex: 0 0 auto;
+  width: clamp(74px, 7.5vw, 104px);
+  height: auto;
+  margin-top: -8px;
+}
+
+.masthead-copy {
+  min-width: 0;
+}
+
 h1,
 h2,
 p {
@@ -271,11 +289,77 @@ h2 {
 }
 
 .frame-grid {
+  --frame-divider-width: 40px;
+  --task-pane-width: calc(50% - 20px);
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  grid-template-columns:
+    minmax(280px, var(--task-pane-width))
+    var(--frame-divider-width)
+    minmax(280px, 1fr);
+  gap: 0;
   max-width: 1500px;
   margin: 0 auto;
+}
+
+.frame-resizer {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.frame-resizer::before {
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  width: 1px;
+  background: #343945;
+  content: "";
+}
+
+.frame-resizer-handle {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 48px;
+  border: 1px solid #454b58;
+  border-radius: 999px;
+  background: #171b24;
+  color: #a8abb5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.frame-resizer:hover .frame-resizer-handle,
+.frame-resizer:focus-visible .frame-resizer-handle,
+.frame-resizer.dragging .frame-resizer-handle {
+  border-color: #73d9d3;
+  background: #1c2b30;
+  color: #73d9d3;
+  transform: scale(1.06);
+}
+
+.frame-resizer:focus-visible {
+  outline: none;
+}
+
+.frame-resizer:focus-visible .frame-resizer-handle {
+  outline: 2px solid #73d9d3;
+  outline-offset: 3px;
+}
+
+body.frame-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+body.frame-resizing iframe {
+  pointer-events: none;
 }
 
 .frame-panel {
